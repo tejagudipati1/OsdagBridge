@@ -2,7 +2,13 @@
 # EXECUTIVE SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════════
 
-from osdagbridge.core.reports.report_utils import _fig_or_placeholder, _render_value, _tex, get_girder_entries
+from osdagbridge.core.reports.report_utils import (
+    _fig_embed,
+    _fig_or_placeholder,
+    _render_value,
+    _tex,
+    get_girder_entries,
+)
 from osdagbridge.core.utils.common import (
     KEY_CARRIAGEWAY_WIDTH,
     KEY_SD_SECTION_DESIGNATION,
@@ -10,7 +16,7 @@ from osdagbridge.core.utils.common import (
     KEY_STRUCTURE_TYPE,
     KEY_TS_DECK_THICKNESS,
     KEY_TS_GIRDER_SPACING,
-    KEY_TS_NO_OF_GIRDERS
+    KEY_TS_NO_OF_GIRDERS,
 )
 
 
@@ -177,6 +183,17 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
               r'\hline' + '\n'
               r'\end{tabular}')
 
+    ur_chart_tex = ""
+    if fig_paths.get("ur_summary"):
+        ur_chart_tex = (
+            "\n\\vspace{0.8em}\n"
+            + _fig_embed(
+                fig_paths["ur_summary"],
+                r"\textbf{Component-wise Maximum Utilization Ratio (UR) Summary}",
+                width=r"0.88\textwidth",
+            )
+        )
+
     return r"""
 \newpage
 {\centering\Large\bfseries Executive Summary\par}
@@ -223,6 +240,7 @@ This section provides a concise summary of the bridge design, key inputs, govern
 
 \vspace{0.4em}
 \noindent\textit{Note: Utilization ratio (UR) = demand / capacity. A value $< 1.0$ indicates a passing check.}
+""" + ur_chart_tex + r"""
 
 \vspace{1em}
 

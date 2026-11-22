@@ -132,6 +132,15 @@ from .chap9 import references
 
 logger = logging.getLogger(__name__)
 
+from .styles import (
+    PAGE_GEOMETRY,
+    LINE_STRETCH,
+    RULE_THICKNESS,
+    build_color_definitions,
+    build_table_spacing_commands,
+    build_footer_rule,
+)
+from .charts import generate_ur_chart, generate_material_quantity_chart
 # --- TEMPLATES START ---
 
 
@@ -152,11 +161,12 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
     jn = _tex(job_number)
     rd = _tex(report_date)
     rv = _tex(report_version)
+    footer_rule_tex = build_footer_rule()
     return r"""
 \documentclass[12pt,a4paper]{report}
 
 % Packages
-\usepackage[a4paper, margin=1in]{geometry}
+\usepackage[""" + PAGE_GEOMETRY + r"""]{geometry}
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{amssymb}
@@ -192,39 +202,15 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 
 \numberwithin{table}{chapter}
 \numberwithin{figure}{chapter}
-% Table layout and spacing: consistent padding, row height, and longtable pre/post skips
-\setlength{\tabcolsep}{6pt}
-\renewcommand{\arraystretch}{1.12}
-\setlength{\LTpre}{0pt}
-\setlength{\LTpost}{6pt}
-% Table rules (outline thickness) and small extra row height for clarity
-\setlength{\arrayrulewidth}{0.5pt}
-\setlength{\extrarowheight}{0.6pt}
-
-% Prevent tables from overflowing past the page bottom:
-% if fewer than 5 baseline-skips remain, break to the next page first.
-\BeforeBeginEnvironment{table}{\needspace{5\baselineskip}}
-\BeforeBeginEnvironment{longtable}{\needspace{5\baselineskip}}
-
-\definecolor{osdagGreen}{HTML}{91B014}
-
+""" + build_table_spacing_commands() + "\n" + build_color_definitions() + r"""
 \fancypagestyle{main}{
   \fancyhf{}
   \fancyhead[L]{""" + pn + r""" $|$ """ + jn + r"""}
   \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
   \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
   \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}
-  \renewcommand{\footrule}{%
-    \ifbool{hasSDonPage}{%
-      \vspace{-20pt}%
-      \hbox to \headwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
-      \vspace{4pt}%
-    }{%
-      \vspace{-8pt}%
-    }%
-    \color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}%
-  }
+  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height """ + RULE_THICKNESS + r""" \vspace{2pt}}
+  """ + footer_rule_tex + r"""
 }
 \fancypagestyle{plain}{
   \fancyhf{}
@@ -232,27 +218,18 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
   \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
   \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
   \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}
-  \renewcommand{\footrule}{%
-    \ifbool{hasSDonPage}{%
-      \vspace{-20pt}%
-      \hbox to \headwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
-      \vspace{4pt}%
-    }{%
-      \vspace{-8pt}%
-    }%
-    \color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}%
-  }
+  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height """ + RULE_THICKNESS + r""" \vspace{2pt}}
+  """ + footer_rule_tex + r"""
 }
 \fancypagestyle{firstpage}{
   \fancyhf{}
   \renewcommand{\headrulewidth}{0pt}
   \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
   \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\footrule}{\vspace{-8pt}\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}}
+  \renewcommand{\footrule}{\vspace{-4pt}\color{osdagGreen}\hrule width\headwidth height """ + RULE_THICKNESS + r""" \vspace{5pt}}
 }
 \pagestyle{main}
-\setstretch{1.15}
+\setstretch{""" + str(LINE_STRETCH) + r"""}
 
 % Custom Commands
 \newcommand{\placeholder}[1]{\textit{\textless #1\textgreater}}
@@ -275,7 +252,6 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 
 \begin{document}
 """
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TITLE PAGE
@@ -899,6 +875,19 @@ def generate_report(payload, request):
             quantities = calculate_material_quantities(payload.inputs, payload.output_dict)
             payload.inputs.update(quantities)
 
+            # Generate matplotlib charts for Executive Summary & Chapter 7
+            ur_chart_path = generate_ur_chart(
+                payload.output_dict, os.path.join(tmp_images, "ur_summary.png")
+            )
+            if ur_chart_path:
+                fig_paths["ur_summary"] = ur_chart_path.replace("\\", "/")
+
+            mat_chart_path = generate_material_quantity_chart(
+                payload.inputs, os.path.join(tmp_images, "material_quantities.png")
+            )
+            if mat_chart_path:
+                fig_paths["material_quantities"] = mat_chart_path.replace("\\", "/")
+
             # ── Assemble LaTeX document (fig_paths now has tmp_dir paths) ──
             bridge = ReportDataBridge(payload.output_dict, payload.inputs, payload)
             span_m = float(payload.inputs.get(KEY_SPAN, 0) or 0)
@@ -928,7 +917,7 @@ def generate_report(payload, request):
             if 'drawings' in secs and payload.options.include_figures:
                 doc_parts.append(ch6_drawings(fig_paths))
 
-            doc_parts.append(ch7_quantities(payload.inputs))
+            doc_parts.append(ch7_quantities(payload.inputs, fig_paths))
 
             mode = str(payload.inputs.get(KEY_DESIGN_MODE, "Optimized")).strip().lower()
             is_custom = mode in {"custom", "customized"}
